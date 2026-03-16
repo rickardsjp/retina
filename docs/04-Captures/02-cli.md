@@ -24,9 +24,13 @@ The target indicates where the packet capture will be performed. This can be set
 
 - `--node-selectors`
 - `--node-names`
-- `--pod-selectors` and `--namespace-selectors` (pairs)
+- `--pod-names` (for specific pods)
+- `--pod-selectors` and `--namespace-selectors` (pairs for label-based pod selection)
 
-Note that Node Selectors are not compatible with Pod Selectors & Namespace Selectors pairs and the capture will not go through if all are populated.
+Note that the following combinations are not allowed:
+
+- Node Selectors are not compatible with Pod Selectors & Namespace Selectors pairs
+- Pod Names are not compatible with Node Selectors, Pod Selectors, or Namespace Selectors
 
 If nothing is set, `kubectl retina capture create` will use `--node-selectors` with the default value shown below in [Flags](#flags).
 
@@ -71,6 +75,7 @@ The network traffic will be uploaded to the specified output location.
 | `node-selectors`      | string     | kubernetes.io/os=linux | A comma-separated list of node labels to select nodes on which the network capture will be performed. |       |
 | `no-wait`             | bool       | true     | By default, Retina capture CLI will exit before the jobs are completed. If false, the CLI will wait until the jobs are completed and clean up the Kubernetes resources created. |       |
 | `packet-size`         | int        | 0        | Limit the packet size in bytes. Packets longer than the defined maximum size will be truncated. The default value 0 indicates no limit. This is beneficial when the user wants to reduce the capture file size or hide customer data due to security concerns. | Only works on Linux.      |
+| `pod-names`           | string     | ""       | A comma-separated list of specific pod names to select pods on which the network capture will be performed. | Mutually exclusive with `node-selectors`, `pod-selectors`, and `namespace-selectors`.      |
 | `pod-selectors`       | string     | ""       | A comma-separated list of pod labels to select pods on which the network capture will be performed. | Pair with `namespace-selectors`.      |
 | `pvc`                 | string     | ""       | PersistentVolumeClaim under the specified or default namespace to store capture files. |       |
 | `s3-access-key-id`    | string     | ""       | S3 access key id to upload capture files.                                   |       |
@@ -109,6 +114,25 @@ kubectl retina capture create \
   --name example-pod-namespace-selectors \
   --pod-selectors="k8s-app=kube-dns" \
   --namespace-selectors="kubernetes.io/metadata.name=kube-system"
+```
+
+Pod Names (Specific Pods)
+
+```sh
+kubectl retina capture create \
+  --name example-pod-names \
+  --namespace myapp \
+  --pod-names "my-app-pod-abc123,my-app-pod-def456"
+```
+
+Single Pod by Name
+
+```sh
+kubectl retina capture create \
+  --name example-single-pod \
+  --namespace myapp \
+  --pod-names "my-app-pod-abc123" \
+  --duration 60s
 ```
 
 ##### Interface Selection
@@ -243,6 +267,18 @@ Download capture files and specify an output location:
 kubectl retina capture download --name <capture-name> -o <output-location>
 ```
 
+Download all available captures in the current namespace:
+
+```sh
+kubectl retina capture download --all
+```
+
+Download all available captures from all namespaces:
+
+```sh
+kubectl retina capture download --all --all-namespaces
+```
+
 By default, files are downloaded to the current directory.
 
 #### Download from Blob Storage
@@ -255,15 +291,90 @@ kubectl retina capture download --blob-url "<blob-url>"
 
 #### Download Output Structure
 
-The command will create a directory with the capture name and download all related capture files. Each capture file is downloaded as a `.tar.gz` archive with a name pattern matching `$(capturename)-$(hostname)-$(date +%Y%m%d%H%M%S%Z).tar.gz`.
+The command will create different output structures depending on the options used:
 
-For example:
+##### Individual Capture Download
+
+For individual capture downloads using `--name`, files are organized by capture name:
 
 ```bash
 /output-directory/
 └── capture-name/
     ├── capture-name-node1-20230320013600UTC.tar.gz
     └── capture-name-node2-20230320013600UTC.tar.gz
+```
+
+##### All Captures Download
+
+When using `--all`, all captures are consolidated into a single timestamped archive:
+
+```bash
+/output-directory/
+└── all-captures-20230320134500.tar.gz
+```
+
+The archive contents are organized by capture name:
+
+```bash
+# Contents of all-captures-20230320134500.tar.gz
+capture-name-1/
+├── capture-name-1-node1-20230320013600UTC.tar.gz
+└── capture-name-1-node2-20230320013600UTC.tar.gz
+capture-name-2/
+├── capture-name-2-node1-20230320014500UTC.tar.gz
+└── capture-name-2-node2-20230320014500UTC.tar.gz
+```
+
+##### All Captures with All Namespaces
+
+When using `--all --all-namespaces`, the archive contents include namespace information:
+
+```bash
+# Contents of all-captures-20230320134500.tar.gz
+namespace-1/
+└── capture-name-1/
+    ├── capture-name-1-node1-20230320013600UTC.tar.gz
+    └── capture-name-1-node2-20230320013600UTC.tar.gz
+namespace-2/
+└── capture-name-2/
+    ├── capture-name-2-node1-20230320014500UTC.tar.gz
+    └── capture-name-2-node2-20230320014500UTC.tar.gz
+```
+
+#### Download Options
+
+| Flag | Description | Notes |
+|------|-------------|-------|
+| `--name` | Download capture files for a specific capture name | Creates individual files in capture-specific directory |
+| `--all` | Download all available captures in the current namespace | Creates single consolidated archive |
+| `--all-namespaces` | Download captures from all namespaces (requires `--all`) | Includes namespace in archive structure |
+| `--blob-url` | Download from Azure Blob Storage using SAS URL | Requires Read/List permissions |
+| `-o, --output` | Specify output directory | Defaults to current directory |
+
+#### Examples
+
+Download a specific capture:
+
+```sh
+kubectl retina capture download --name my-capture
+```
+
+Download all captures with custom output location:
+
+```sh
+kubectl retina capture download --all -o /tmp/retina-downloads
+```
+
+Download all captures from all namespaces:
+
+```sh
+kubectl retina capture download --all --all-namespaces
+```
+
+Download from blob storage:
+
+```sh
+kubectl retina capture download --blob-url "https://mystorageaccount.blob.core.windows.net/captures?sp=rl&st=..."
 ```
 
 ## Obtaining the output

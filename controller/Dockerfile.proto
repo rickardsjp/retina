@@ -1,5 +1,5 @@
-# skopeo inspect docker://mcr.microsoft.com/oss/go/microsoft/golang:1.24.6-azurelinux3.0 --format "{{.Name}}@{{.Digest}}"
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang@sha256:da2126cc938c2ced6d2b5e786b705e6a5241995d7a157e467c30b001cdcff915
+# skopeo inspect docker://mcr.microsoft.com/oss/go/microsoft/golang:1.26.0-azurelinux3.0 --format "{{.Name}}@{{.Digest}}"
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/oss/go/microsoft/golang@sha256:0a0df8a0d91137926313f5eaa77de14edb89254cef8ef4a07208e1119c6067ef
 
 LABEL Name=retina-builder Version=0.0.1
 
@@ -13,4 +13,6 @@ RUN unzip protoc-24.2-linux-x86_64.zip -d protoc
 RUN mv protoc/bin/protoc /usr/bin/protoc
 
 WORKDIR /app
-ENTRYPOINT protoc -I=. --go_out=paths=source_relative:. ./pkg/utils/metadata_linux.proto
+ENTRYPOINT /bin/sh -c "protoc -I=. --go_out=paths=source_relative:. ./pkg/utils/metadata_linux.proto && \
+	protoc -I=. --go_out=paths=source_relative:. ./pkg/utils/metadata_darwin.proto && \
+	protoc -I=. --go_out=paths=source_relative:. ./pkg/utils/metadata_windows.proto"
